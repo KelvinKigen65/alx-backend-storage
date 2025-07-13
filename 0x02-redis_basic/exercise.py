@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-This module provides a Cache class that interfaces with a Redis database,
-allowing storage and retrieval of various data types using randomly generated keys.
-It includes decorators for counting method calls and tracking call history.
+This module provides a Cache class that interfaces with a Redis database.
+It supports storing data, retrieving with type conversion, call counting,
+call history logging, and more using Redis.
 """
 
 import redis
@@ -42,15 +42,31 @@ def call_history(method: Callable) -> Callable:
     return wrapper
 
 
+def replay(method: Callable):
+    """
+    Displays the history of calls of a particular function.
+    It prints the number of calls, inputs, and corresponding outputs.
+    """
+    redis_instance = redis.Redis()
+    qualname = method.__qualname__
+    inputs = redis_instance.lrange(f"{qualname}:inputs", 0, -1)
+    outputs = redis_instance.lrange(f"{qualname}:outputs", 0, -1)
+    count = redis_instance.get(qualname)
+    print(f"{qualname} was called {int(count or 0)} times:")
+
+    for inp, out in zip(inputs, outputs):
+        print(f"{qualname}(*{inp.decode('utf-8')}) -> {out.decode('utf-8')}")
+
+
 class Cache:
     """
-    The Cache class provides methods to store and retrieve data from a Redis database.
-    It uses decorators to log usage and call history of its methods.
+    The Cache class provides methods to store and retrieve data from Redis.
+    It tracks how often methods are called and logs inputs/outputs for replay.
     """
 
     def __init__(self):
         """
-        Initializes the Redis client and flushes the current database.
+        Initializes the Redis client and flushes the database.
         """
         self._redis = redis.Redis()
         self._redis.flushdb()
@@ -62,7 +78,7 @@ class Cache:
         Stores the given data in Redis using a randomly generated UUID key.
 
         Args:
-            data (Union[str, bytes, int, float]): The data to be stored in Redis.
+            data: The data to store (str, bytes, int, or float).
 
         Returns:
             str: The key under which the data is stored.
